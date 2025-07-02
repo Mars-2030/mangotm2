@@ -31,11 +31,33 @@ st.set_page_config(
 CHINESE_FONT_PATH = 'streamlit2/NotoSansSC-Regular.ttf'
 CHINESE_STOPWORDS_PATH = 'cn_stopwords.txt'
 
+# @st.cache_resource
+# def download_nltk_data():
+#     for resource in ['stopwords', 'punkt']:
+#         try: nltk.data.find(f'corpora/{resource}')
+#         except LookupError: nltk.download(resource)
+# download_nltk_data()
+
+
 @st.cache_resource
 def download_nltk_data():
-    for resource in ['stopwords', 'punkt']:
-        try: nltk.data.find(f'corpora/{resource}')
-        except LookupError: nltk.download(resource)
+    """Download required NLTK data with proper error handling"""
+    required_resources = [
+        ('tokenizers/punkt_tab', 'punkt_tab'),
+        ('tokenizers/punkt', 'punkt'),
+        ('corpora/stopwords', 'stopwords')
+    ]
+    
+    for path, name in required_resources:
+        try:
+            nltk.data.find(path)
+        except LookupError:
+            try:
+                st.info(f"Downloading NLTK {name} data...")
+                nltk.download(name, quiet=True)
+            except Exception as e:
+                st.warning(f"Could not download {name}: {e}")
+                
 download_nltk_data()
 
 @st.cache_data

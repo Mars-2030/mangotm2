@@ -1,11 +1,12 @@
-streamlit
-pandas
+streamlit==1.45.0
+pandas==2.2.3
 numpy
-scikit-learn
+scikit-learn==1.5.2
 plotly
 nltk
 wordcloud
-matplotlib
+matplotlib==3.9.2
 jieba
 gensim
 emoji
+scipy==1.10.1 

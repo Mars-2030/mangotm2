@@ -39,26 +39,113 @@ CHINESE_STOPWORDS_PATH = 'cn_stopwords.txt'
 # download_nltk_data()
 
 
+
 @st.cache_resource
-def download_nltk_data():
-    """Download required NLTK data with proper error handling"""
-    required_resources = [
-        ('tokenizers/punkt_tab', 'punkt_tab'),
-        ('tokenizers/punkt', 'punkt'),
-        ('corpora/stopwords', 'stopwords')
-    ]
-    
-    for path, name in required_resources:
+def ensure_nltk_resources():
+    import os
+    import shutil
+    import tempfile
+    from pathlib import Path
+    import zipfile
+    import nltk
+
+    def log_directory_contents(base_path, log_label):
+        content_logs = [f"DEBUG: Listing contents under {log_label} '{base_path}':"]
+        if os.path.exists(base_path):
+            for root, dirs, files in os.walk(base_path):
+                level = root.replace(str(base_path), '').count(os.sep)
+                indent = ' ' * 4 * level
+                content_logs.append(f"{indent}{os.path.basename(root)}/")
+                subindent = ' ' * 4 * (level + 1)
+                for f in files:
+                    content_logs.append(f"{subindent}{f}")
+        else:
+            content_logs.append(f"{log_label} path '{base_path}' does not exist.")
+        return content_logs
+
+    try:
+        app_nltk_data_path = Path(os.getcwd()) / "nltk_data_streamlit"
+        app_nltk_data_path.mkdir(parents=True, exist_ok=True)
+    except Exception as e_mkdir:
+        app_nltk_data_path = Path(tempfile.gettempdir()) / "streamlit_nltk_data"
+        app_nltk_data_path.mkdir(parents=True, exist_ok=True)
+        st.warning(f"Could not create nltk_data_streamlit in app root. Using temp dir: {app_nltk_data_path}. Error: {e_mkdir}")
+
+    if str(app_nltk_data_path) not in nltk.data.path:
+        nltk.data.path.insert(0, str(app_nltk_data_path))
+
+    resources_to_check = {
+        "stopwords": ("corpora/stopwords", "stopwords"),
+        "punkt": ("tokenizers/punkt", "punkt"),
+        "wordnet": ("corpora/wordnet", "wordnet"),
+    }
+
+    all_good = True
+    messages = []
+
+    messages.append(f"INFO: NLTK will search for data in these paths (priority order): {nltk.data.path}")
+    messages.append(f"INFO: NLTK downloads (if needed) will target: {app_nltk_data_path}")
+
+    for name, (path_suffix, package_id) in resources_to_check.items():
         try:
-            nltk.data.find(path)
+            nltk.data.find(path_suffix)
+            messages.append(f"SUCCESS: NLTK resource '{name}' found (using path_suffix: '{path_suffix}').")
         except LookupError:
+            messages.append(f"INFO: NLTK resource '{name}' not found. Attempting to download package ID '{package_id}'...")
             try:
-                st.info(f"Downloading NLTK {name} data...")
-                nltk.download(name, quiet=True)
-            except Exception as e:
-                st.warning(f"Could not download {name}: {e}")
-                
-download_nltk_data()
+                nltk.download(package_id, download_dir=str(app_nltk_data_path), quiet=False)
+
+                # Explicit unzip if 'wordnet' zip remains
+                if name == "wordnet":
+                    zip_file = app_nltk_data_path / 'corpora' / 'wordnet.zip'
+                    target_dir = app_nltk_data_path / 'corpora' / 'wordnet'
+                    if zip_file.exists():
+                        if target_dir.exists():
+                            shutil.rmtree(target_dir)
+                        with zipfile.ZipFile(zip_file, 'r') as zip_ref:
+                            zip_ref.extractall(target_dir)
+                        messages.append(f"INFO: Extracted 'wordnet.zip' into '{target_dir}'.")
+                    else:
+                        messages.append(f"WARNING: 'wordnet.zip' not found after download. Manual intervention may be needed.")
+
+                nltk.data.find(path_suffix)
+                messages.append(f"SUCCESS: NLTK resource '{name}' verified in '{app_nltk_data_path}'.")
+            except LookupError:
+                messages.append(f"ERROR: NLTK resource '{name}' STILL NOT FOUND after forced download and unzip.")
+                messages += log_directory_contents(app_nltk_data_path, "NLTK Data Path Root")
+                messages += log_directory_contents(app_nltk_data_path / 'corpora', "Corpora Subfolder")
+                all_good = False
+            except Exception as e_nltk_dl:
+                messages.append(f"ERROR: Failed to download or extract '{name}'. Exception: {e_nltk_dl}")
+                all_good = False
+
+    st.session_state.nltk_messages_for_sidebar = messages
+    st.session_state.nltk_resources_all_good = all_good
+
+    if all_good:
+        st.session_state.nltk_messages_for_sidebar.append("SUCCESS: All required NLTK resources are correctly set up.")
+    else:
+        st.session_state.nltk_messages_for_sidebar.append("ERROR: One or more NLTK resources could not be set up. Check the logs for diagnostics.")
+
+    return all_good
+
+
+NLTK_READY = ensure_nltk_resources()
+
+# --- Import UserTopicModelingSystem ---
+nltk_stopwords_global = None 
+if NLTK_READY and MODULES_AVAILABLE: # Check MODULES_AVAILABLE here too
+    try:
+        from user_topic_modeling import UserTopicModelingSystem 
+        from nltk.corpus import stopwords 
+        nltk_stopwords_global = stopwords 
+        USER_TOPIC_MODELING_CLASS_LOADED = True
+    except ImportError as e: USER_TOPIC_MODELING_ERROR_MESSAGE = f"Could not import UserTopicModelingSystem class from 'user_topic_modeling.py'. Error: {e}"
+    except Exception as e_other: USER_TOPIC_MODELING_ERROR_MESSAGE = f"Unexpected error importing UserTopicModelingSystem class. Error: {e_other}"
+else:
+    if not NLTK_READY: USER_TOPIC_MODELING_ERROR_MESSAGE = "NLTK resources failed. Topic modeling unavailable."
+    elif not MODULES_AVAILABLE: USER_TOPIC_MODELING_ERROR_MESSAGE = "App component files missing. Cannot proceed with topic modeling."
+
 
 @st.cache_data
 def load_chinese_stopwords():

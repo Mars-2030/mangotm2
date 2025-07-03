@@ -28,7 +28,7 @@ st.set_page_config(
 )
 
 # --- Constants & NLTK Setup ---
-CHINESE_FONT_PATH = 'NotoSansSC-Regular.ttf'
+CHINESE_FONT_PATH = 'streamlit2/NotoSansSC-Regular.ttf'
 CHINESE_STOPWORDS_PATH = 'cn_stopwords.txt'
 
 # @st.cache_resource
